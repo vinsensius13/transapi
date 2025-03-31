@@ -19,6 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")  # ← INI DIA
+def read_root():
+    return {"message": "TransAPI is alive! 🔥"}
+
 # 🧠 Model request
 class TranslateRequest(BaseModel):
     text: str
