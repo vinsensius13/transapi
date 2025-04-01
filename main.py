@@ -1,9 +1,12 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from googletrans import Translator
 from sudachipy import dictionary, tokenizer
+from gtts import gTTS
+import uuid
 
 # ✅ Set manual path dictionary Sudachi (optional, bisa dihapus kalau gak perlu di Cloud Run)
 os.environ["SUDACHIDICT_DIR"] = "/usr/local/lib/python3.10/dist-packages/sudachidict_core"
@@ -86,3 +89,15 @@ async def translate_and_analyze(request: TranslateRequest):
         "translated_text": translated_text_keigo,
         "tokens": tokens
     }
+
+# 🔊 Endpoint Text-to-Speech
+@app.post("/speak")
+async def speak_text(request: TranslateRequest):
+    text = convert_to_string(request.text)
+
+    # Buat file unik agar tidak bentrok
+    filename = f"{uuid.uuid4()}.mp3"
+    tts = gTTS(text=text, lang=request.dest)
+    tts.save(filename)
+
+    return FileResponse(filename, media_type="audio/mpeg", filename="speak.mp3")
