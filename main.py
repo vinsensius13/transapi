@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")  # ← INI DIA
+@app.get("/")
 def read_root():
     return {"message": "TransAPI is alive! 🔥"}
 
@@ -65,7 +65,12 @@ async def translate_and_analyze(request: TranslateRequest):
 
     result = translator.translate(text, src=src, dest=dest)
     translated_text = result.text
-    translated_text_keigo = to_keigo(translated_text)
+
+    # ✅ Keigo hanya jika hasil terjemahan adalah bahasa Jepang
+    if dest == "ja":
+        translated_text_keigo = to_keigo(translated_text)
+    else:
+        translated_text_keigo = translated_text
 
     tokens = []
     if dest == "ja":
