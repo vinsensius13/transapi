@@ -7,6 +7,7 @@ from googletrans import Translator
 from sudachipy import dictionary, tokenizer
 from gtts import gTTS
 import uuid
+import jaconv  # ✅ Library untuk konversi Kana → Romaji
 
 # ✅ Optional: set path dictionary Sudachi kalau perlu (Cloud Run / lokal Linux)
 os.environ["SUDACHIDICT_DIR"] = "/usr/local/lib/python3.10/dist-packages/sudachidict_core"
@@ -66,28 +67,31 @@ async def translate_and_analyze(request: TranslateRequest):
     src = request.src
     dest = request.dest
 
-    result = translator.translate(text, src=src, dest=dest)
-    translated_text = result.text
+    # Translate input (bisa romaji → kanji/kana otomatis)
+    result = translator.translate(text, src=src, dest="ja")
+    japanese_text = result.text
 
-    if dest == "ja":
-        translated_text_keigo = to_keigo(translated_text)
+    # Konversi romaji → kanji otomatis oleh Google Translate
+    romaji = ""
+    if src == "ja":
+        translated_result = translator.translate(japanese_text, src="ja", dest="id")
+        final_translation = translated_result.text
     else:
-        translated_text_keigo = translated_text
+        final_translation = japanese_text
 
-    tokens = []
-    if dest == "ja":
-        for m in tokenizer_obj.tokenize(translated_text_keigo, tokenizer.Tokenizer.SplitMode.C):
-            tokens.append({
-                "surface": m.surface(),
-                "pos": ",".join(m.part_of_speech()),
-                "dictionary_form": m.dictionary_form(),
-                "reading": m.reading_form()
-            })
+    # Generate romaji dari Japanese text
+    romaji_list = []
+    for m in tokenizer_obj.tokenize(japanese_text, tokenizer.Tokenizer.SplitMode.C):
+        reading = m.reading_form()
+        romaji_word = jaconv.kana2alphabet(reading)
+        romaji_list.append(romaji_word)
+    romaji = " ".join(romaji_list)
 
     return JSONResponse(
         content={
-            "translated_text": translated_text_keigo,
-            "tokens": tokens
+            "translated_text": final_translation,
+            "japanese_text": japanese_text,
+            "romaji": romaji
         },
         media_type="application/json; charset=utf-8"
     )
