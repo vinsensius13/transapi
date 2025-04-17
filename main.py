@@ -1,4 +1,6 @@
 import os
+import uuid
+import jaconv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -6,10 +8,8 @@ from pydantic import BaseModel
 from googletrans import Translator
 from sudachipy import dictionary, tokenizer
 from gtts import gTTS
-import uuid
-import jaconv  # ✅ Library untuk konversi Kana → Romaji
 
-# ✅ Optional: set path dictionary Sudachi kalau perlu (Cloud Run / lokal Linux)
+# ✅ Optional: buat Linux/Cloud Run
 os.environ["SUDACHIDICT_DIR"] = "/usr/local/lib/python3.10/dist-packages/sudachidict_core"
 
 app = FastAPI()
@@ -33,7 +33,7 @@ class TranslateRequest(BaseModel):
     src: str = "id"
     dest: str = "ja"
 
-# ✨ Fungsi ubah ke bentuk keigo (-masu form)
+# ✨ Optional: ubah ke keigo (-masu form)
 def to_keigo(text: str) -> str:
     masu_endings = {
         "aru": "あります",
@@ -41,62 +41,57 @@ def to_keigo(text: str) -> str:
         "iku": "行きます",
         "ru": "ます",
     }
-
     words = text.split()
     for i in range(len(words)):
         word = words[i]
-        if word.endswith("aru"):
-            words[i] = word[:-3] + masu_endings["aru"]
-        elif word.endswith("iru"):
-            words[i] = word[:-3] + masu_endings["iru"]
-        elif word.endswith("iku"):
-            words[i] = word[:-3] + masu_endings["iku"]
-        elif word.endswith("ru"):
-            words[i] = word[:-2] + masu_endings["ru"]
-
+        for key in masu_endings:
+            if word.endswith(key):
+                words[i] = word[:-len(key)] + masu_endings[key]
+                break
     return " ".join(words)
 
-# 🔧 Pastikan input-nya selalu string
+# 🔧 Force string
 def convert_to_string(text) -> str:
     return str(text) if not isinstance(text, str) else text
 
-# 📦 Endpoint utama
+# 🔄 Translate & Analyze
 @app.post("/translate_and_analyze")
 async def translate_and_analyze(request: TranslateRequest):
     text = convert_to_string(request.text)
     src = request.src
     dest = request.dest
 
-    # Translate input (bisa romaji → kanji/kana otomatis)
+    # Translate text (romaji → kanji/kana auto by Google Translate)
     result = translator.translate(text, src=src, dest="ja")
     japanese_text = result.text
 
-    # Konversi romaji → kanji otomatis oleh Google Translate
-    romaji = ""
+    # If user wants translation to Bahasa
     if src == "ja":
         translated_result = translator.translate(japanese_text, src="ja", dest="id")
         final_translation = translated_result.text
     else:
         final_translation = japanese_text
 
-    # Generate romaji dari Japanese text
+    # Tokenize Japanese & convert to romaji
     romaji_list = []
     for m in tokenizer_obj.tokenize(japanese_text, tokenizer.Tokenizer.SplitMode.C):
         reading = m.reading_form()
-        romaji_word = jaconv.kana2alphabet(reading)
-        romaji_list.append(romaji_word)
-    romaji = " ".join(romaji_list)
+        hira = jaconv.kata2hira(reading)  # convert to hiragana first
+        romaji = jaconv.kana2alphabet(hira)
+        romaji_list.append(romaji)
+
+    romaji_output = " ".join(romaji_list)
 
     return JSONResponse(
         content={
             "translated_text": final_translation,
             "japanese_text": japanese_text,
-            "romaji": romaji
+            "romaji": romaji_output
         },
         media_type="application/json; charset=utf-8"
     )
 
-# 🔊 Endpoint Text-to-Speech
+# 🔊 TTS
 @app.post("/speak")
 async def speak_text(request: TranslateRequest):
     text = convert_to_string(request.text)
