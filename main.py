@@ -54,29 +54,43 @@ def to_keigo(text: str) -> str:
 def convert_to_string(text) -> str:
     return str(text) if not isinstance(text, str) else text
 
-# 🔄 Translate & Analyze
 @app.post("/translate_and_analyze")
 async def translate_and_analyze(request: TranslateRequest):
     text = convert_to_string(request.text)
-    src = request.src
-    dest = request.dest
+    src = request.src.lower()
+    dest = request.dest.lower()
 
-    # Translate text (romaji → kanji/kana auto by Google Translate)
-    result = translator.translate(text, src=src, dest="ja")
-    japanese_text = result.text
-
-    # If user wants translation to Bahasa
+    # 🌸 Deteksi apakah input user adalah romaji (jika input-nya dianggap Jepang)
     if src == "ja":
-        translated_result = translator.translate(japanese_text, src="ja", dest="id")
-        final_translation = translated_result.text
-    else:
-        final_translation = japanese_text
+        is_romaji = all(ord(c) < 128 and (c.isalnum() or c.isspace()) for c in text)
+        if is_romaji:
+            # romaji ke kana (hiragana/katakana auto oleh jaconv)
+            kana_text = jaconv.alphabet2kana(text)
+        else:
+            kana_text = text
 
-    # Tokenize Japanese & convert to romaji
+        japanese_text = kana_text
+
+        # Translate ke Bahasa Indonesia
+        translated = translator.translate(japanese_text, src="ja", dest="id")
+        final_translation = translated.text
+    else:
+        # Dari Indonesia ke Jepang
+        translated = translator.translate(text, src=src, dest="ja")
+        japanese_text = translated.text
+
+        # Translate hasil Jepang ke target dest (misal: id)
+        if dest == "ja":
+            final_translation = japanese_text
+        else:
+            result_back = translator.translate(japanese_text, src="ja", dest=dest)
+            final_translation = result_back.text
+
+    # 🔠 Generate romaji dari hasil Japanese text
     romaji_list = []
-    for m in tokenizer_obj.tokenize(japanese_text, tokenizer.Tokenizer.SplitMode.C):
-        reading = m.reading_form()
-        hira = jaconv.kata2hira(reading)  # convert to hiragana first
+    for token in tokenizer_obj.tokenize(japanese_text, tokenizer.Tokenizer.SplitMode.C):
+        reading = token.reading_form()
+        hira = jaconv.kata2hira(reading)
         romaji = jaconv.kana2alphabet(hira)
         romaji_list.append(romaji)
 
